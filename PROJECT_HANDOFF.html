@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hunter's Mirror Project Handoff</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #231f20;
+        background: #f7f2ea;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        line-height: 1.55;
+      }
+
+      main {
+        width: min(980px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0 72px;
+      }
+
+      header {
+        border-bottom: 3px solid #8d2f26;
+        padding-bottom: 28px;
+        margin-bottom: 28px;
+      }
+
+      h1 {
+        margin: 0 0 10px;
+        font-size: clamp(2.4rem, 7vw, 4.6rem);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin: 34px 0 10px;
+        font-size: 1.45rem;
+        color: #8d2f26;
+      }
+
+      h3 {
+        margin: 22px 0 8px;
+      }
+
+      p {
+        margin: 0 0 12px;
+      }
+
+      ul,
+      ol {
+        margin-top: 8px;
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 6px 0;
+      }
+
+      code {
+        padding: 2px 5px;
+        border-radius: 4px;
+        background: #ebe1d5;
+      }
+
+      pre {
+        overflow-x: auto;
+        padding: 14px 16px;
+        border-radius: 8px;
+        background: #231f20;
+        color: #fffaf2;
+      }
+
+      .summary {
+        max-width: 780px;
+        font-size: 1.12rem;
+        color: #554b45;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+        margin: 24px 0 0;
+      }
+
+      .meta div,
+      .callout {
+        border: 1px solid #dbcbbb;
+        border-radius: 8px;
+        background: #fffaf4;
+        padding: 14px;
+      }
+
+      .meta span {
+        display: block;
+        color: #756960;
+        font-size: 0.82rem;
+        font-weight: 700;
+        text-transform: uppercase;
+      }
+
+      .meta strong {
+        display: block;
+        margin-top: 4px;
+      }
+
+      .callout {
+        border-left: 5px solid #8d2f26;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 14px 0;
+        background: #fffaf4;
+      }
+
+      th,
+      td {
+        border: 1px solid #dbcbbb;
+        padding: 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        background: #eee2d3;
+      }
+
+      @media (max-width: 740px) {
+        .meta {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Hunter's Mirror</h1>
+        <p class="summary">
+          Project handoff for a Bloodborne character creation assistant that estimates in-game slider
+          values from an uploaded face image.
+        </p>
+        <div class="meta">
+          <div>
+            <span>Project Type</span>
+            <strong>Browser-based web tool</strong>
+          </div>
+          <div>
+            <span>Current State</span>
+            <strong>Working prototype</strong>
+          </div>
+          <div>
+            <span>Primary Goal</span>
+            <strong>Photo to Bloodborne sliders</strong>
+          </div>
+        </div>
+      </header>
+
+      <section>
+        <h2>What We Are Attempting To Create</h2>
+        <p>
+          The goal is to create a useful tool for Bloodborne fans who want to recreate a real face,
+          celebrity face, fictional character, or reference image inside Bloodborne's PS4 character
+          creator.
+        </p>
+        <p>
+          A user uploads a clear face image. The app analyzes the face and produces a full character
+          creation sheet with Bloodborne-style slider values and manual menu choices. The user can
+          then enter those values in the game to create the closest possible match.
+        </p>
+        <div class="callout">
+          <strong>Important product direction:</strong> this should become a serious community tool,
+          not a toy demo. The long-term value comes from improving slider accuracy through real
+          Bloodborne calibration data and presenting the output in a format players can easily use.
+        </div>
+      </section>
+
+      <section>
+        <h2>What Exists So Far</h2>
+        <ul>
+          <li>Vite browser app with a polished single-page interface.</li>
+          <li>Local image upload and drag/drop support.</li>
+          <li>MediaPipe Face Landmarker integration for browser-side facial analysis.</li>
+          <li>Estimated Bloodborne slider sheet generated from face proportions.</li>
+          <li>Confidence score and extracted measurement summary.</li>
+          <li>JSON and CSV export buttons.</li>
+          <li>Calibration preset button for checking the full sheet without uploading a photo.</li>
+          <li>Expanded Bloodborne menu coverage: Basic Setup, Face Presets, Scale Adjustment, Face Shape, Skin Color/Makeup, Hair/Facial Hair, Pupils, Tattoo/Mark/Glasses, and Tweak Tattoo/Mark.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Current Technical Approach</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Area</th>
+              <th>Implementation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Frontend</td>
+              <td>Plain JavaScript, HTML, CSS, bundled with Vite.</td>
+            </tr>
+            <tr>
+              <td>Face Detection</td>
+              <td>MediaPipe Tasks Vision Face Landmarker loaded from CDN.</td>
+            </tr>
+            <tr>
+              <td>Image Handling</td>
+              <td>Client-side only. Uploaded photos are not sent to a server.</td>
+            </tr>
+            <tr>
+              <td>Slider Mapping</td>
+              <td>Hand-authored heuristic mapping from 2D facial landmark ratios to Bloodborne 0-255 slider values.</td>
+            </tr>
+            <tr>
+              <td>Export</td>
+              <td>Generated values can be exported as JSON or CSV.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Project Files</h2>
+        <ul>
+          <li><code>index.html</code> - app entry point.</li>
+          <li><code>src/main.js</code> - UI rendering, MediaPipe setup, image analysis, slider estimation, export logic.</li>
+          <li><code>src/styles.css</code> - app styling and responsive layout.</li>
+          <li><code>README.md</code> - quick setup and roadmap notes.</li>
+          <li><code>PROJECT_HANDOFF.html</code> - this handoff document.</li>
+          <li><code>package.json</code> - npm scripts and dependency declaration.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>How To Run</h2>
+        <pre><code>npm install
+npm run dev</code></pre>
+        <p>Then open the local URL printed by Vite, usually <code>http://localhost:5173</code>.</p>
+        <h3>Production Build</h3>
+        <pre><code>npm run build</code></pre>
+      </section>
+
+      <section>
+        <h2>Known Limitations</h2>
+        <ul>
+          <li>The current estimator uses 2D face landmarks, not Bloodborne's internal 3D face mesh.</li>
+          <li>Depth-related values like protrusion, forehead depth, and some nose/jaw profile settings are rough estimates.</li>
+          <li>Skin tone, hair, brows, beard, pupils, makeup, tattoo/mark, and glasses are mostly manual placeholders right now.</li>
+          <li>Accuracy must be validated by entering generated values into Bloodborne and comparing screenshots.</li>
+          <li>The app currently depends on MediaPipe CDN assets. A production version may want vendored assets or a lockfile-backed package import.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Research Notes</h2>
+        <p>
+          The slider/menu taxonomy was based on public Bloodborne character creation references,
+          especially:
+        </p>
+        <ul>
+          <li><a href="https://www.bloodborne-wiki.com/p/sliders.html">Bloodborne Wiki slider tables</a></li>
+          <li><a href="https://bloodborne-archive.fandom.com/wiki/Face_Details">Bloodborne Face Details menu reference</a></li>
+        </ul>
+        <p>
+          During review, Base Skin Color was corrected: it should not be treated as a Basic Setup
+          item. It belongs under Face Details / Skin Color / Makeup.
+        </p>
+      </section>
+
+      <section>
+        <h2>Recommended Next Development Steps</h2>
+        <ol>
+          <li>Create a real calibration dataset of source faces, generated sliders, and in-game Bloodborne screenshots.</li>
+          <li>Improve the estimator by tuning slider mappings against those screenshots.</li>
+          <li>Add source-photo color sampling for skin, hair, brows, beard, lips, and pupils.</li>
+          <li>Add an editable review mode so users can adjust generated values before exporting.</li>
+          <li>Add visual side-by-side comparison between source image and in-game result screenshots.</li>
+          <li>Consider a shareable "Souls sliders" export layout for posting results to the community.</li>
+          <li>Add automated tests around slider generation so future tuning does not break menu coverage.</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>
