@@ -1,6 +1,7 @@
 import {
   computeMetrics,
   calculateConfidence,
+  confidenceChecks,
   buildDefaults,
   applySharedInference,
 } from "../engine.js";
@@ -42,7 +43,7 @@ function infer(points, blendshapes) {
   const { values, notes } = buildDefaults(config);
   applySharedInference(values, notes, m);
   const confidence = calculateConfidence(m);
-  return { values, notes, metrics: m, confidence };
+  return { values, notes, metrics: m, confidence, checks: confidenceChecks(m) };
 }
 
 function sample() {

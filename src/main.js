@@ -1,7 +1,7 @@
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
 import "./styles.css";
 import { games, getGame } from "./games/index.js";
-import { buildDefaults, getConfidenceMessage, download, csvCell, escapeHtml, samplePhotoColors, applyPhotoColors } from "./engine.js";
+import { buildDefaults, getConfidenceMessage, download, csvCell, escapeHtml, samplePhotoColors, applyPhotoColors, photoDrivenCount } from "./engine.js";
 
 const app = document.querySelector("#app");
 
@@ -18,6 +18,8 @@ let state = {
   result: defaultResult(getGame("bloodborne")),
   metrics: null,
   confidence: 0,
+  checks: null,
+  coverage: null,
   imageName: "",
   landmarks: [],
 };
@@ -78,6 +80,8 @@ function selectGame(gameId) {
     result: defaultResult(getGame(gameId)),
     metrics: null,
     confidence: 0,
+    checks: null,
+    coverage: null,
     landmarks: [],
     imageName: "",
     status: faceLandmarker
@@ -137,11 +141,13 @@ function render() {
 
         <aside class="panel score-panel">
           <div>
-            <span class="label">Match confidence</span>
+            <span class="label">Photo quality</span>
             <strong>${Math.round(state.confidence * 100)}%</strong>
           </div>
           <div class="meter"><span style="width:${Math.round(state.confidence * 100)}%"></span></div>
-          <p>${escapeHtml(getConfidenceMessage(state.confidence))}</p>
+          <p>${escapeHtml(getConfidenceMessage(state.confidence, !!state.metrics))}</p>
+          ${renderChecks(state.checks)}
+          ${renderCoverage(state.coverage)}
           <dl class="metrics">${renderMetrics(state.metrics)}</dl>
         </aside>
       </section>
@@ -222,6 +228,23 @@ function renderGroup(game, group) {
   `;
 }
 
+function renderChecks(checks) {
+  if (!checks) return "";
+  const rows = checks
+    .map(
+      (c) => `<div><dt>${escapeHtml(c.label)}</dt><dd>${c.passed ? "✓" : "✗"} ${c.value.toFixed(2)} <span>(${c.min}–${c.max})</span></dd></div>`,
+    )
+    .join("");
+  return `<p class="label">Quality checks</p><dl class="metrics">${rows}</dl>`;
+}
+
+function renderCoverage(coverage) {
+  if (!coverage) return "";
+  const pct = coverage.total ? Math.round((coverage.driven / coverage.total) * 100) : 0;
+  return `<p>Photo-driven rows: <strong>${coverage.driven} of ${coverage.total} (${pct}%)</strong> — the rest are manual or neutral.</p>
+    <p>Expected likeness: not yet measurable. The mappings are uncalibrated, so no likeness percentage is shown.</p>`;
+}
+
 function renderMetrics(metrics) {
   if (!metrics) {
     return `
@@ -273,6 +296,8 @@ function bindEvents() {
       result: { values: sample.values, notes: sample.notes },
       metrics: sample.metrics,
       confidence: sample.confidence,
+      checks: null,
+      coverage: null,
       landmarks: [],
       imageName: "Calibration preset",
       status: `Loaded the neutral ${game.name} preset so you can inspect the full sheet.`,
@@ -351,6 +376,8 @@ async function analyzeImage(image) {
         isLoading: false,
         status: "No face found. Try a brighter front-facing image.",
         confidence: 0,
+        checks: null,
+        coverage: null,
         landmarks: [],
       });
       return;
@@ -377,6 +404,8 @@ async function analyzeImage(image) {
       result: { values: analysis.values, notes: analysis.notes },
       metrics: analysis.metrics,
       confidence: analysis.confidence,
+      checks: analysis.checks || null,
+      coverage: photoDrivenCount(analysis.notes),
       landmarks,
       status: `Analyzed ${state.imageName || "image"} for ${game.name}. Slider sheet updated.`,
     });

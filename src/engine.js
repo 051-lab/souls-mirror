@@ -70,22 +70,56 @@ export function computeMetrics(points, blendshapes = []) {
   };
 }
 
-export function calculateConfidence(m) {
-  const checks = [
-    inRange(m.faceRatio, 1.05, 1.75),
-    inRange(m.eyeSpacing, 0.16, 0.4),
-    inRange(m.noseWidthRatio, 0.18, 0.46),
-    inRange(m.mouthWidthRatio, 0.25, 0.6),
-    inRange(m.lipThickness, 0.01, 0.08),
+// Photo-quality checks (added detail 2026-10-25). Each check is one
+// landmark ratio inside a plausible-human window. The score is the
+// fraction passed — nothing more. It measures the PHOTO, not the
+// likeness: it knows nothing about calibration, colors, or the
+// in-game result, so the UI labels it "Photo quality", not "Match
+// confidence". (Previous formula was 0.42 + 0.1 × passed, which gave
+// even a photo failing every check a misleading 42%.)
+export function confidenceChecks(m) {
+  const check = (label, value, min, max) => ({
+    label,
+    value,
+    min,
+    max,
+    passed: inRange(value, min, max),
+  });
+  return [
+    check("Face ratio", m.faceRatio, 1.05, 1.75),
+    check("Eye spacing", m.eyeSpacing, 0.16, 0.4),
+    check("Nose width", m.noseWidthRatio, 0.18, 0.46),
+    check("Mouth width", m.mouthWidthRatio, 0.25, 0.6),
+    check("Lip thickness", m.lipThickness, 0.01, 0.08),
   ];
-  return 0.42 + checks.filter(Boolean).length * 0.1;
 }
 
-export function getConfidenceMessage(confidence) {
-  if (confidence >= 0.8) return "Good source image. These values should give a strong starting point.";
-  if (confidence >= 0.6) return "Usable estimate. Expect manual tuning around eyes, skin, hair, and depth sliders.";
-  if (confidence > 0) return "Low confidence. Use a cleaner front-facing image for better slider guesses.";
+export function calculateConfidence(m) {
+  const checks = confidenceChecks(m);
+  return checks.filter((c) => c.passed).length / checks.length;
+}
+
+export function getConfidenceMessage(confidence, hasMetrics = false) {
+  if (confidence >= 0.8) return "Good source photo — clean measurements.";
+  if (confidence >= 0.6) return "Usable photo. Expect manual tuning around eyes, skin, hair, and depth sliders.";
+  if (hasMetrics) return "Low photo quality. Use a cleaner front-facing image for better slider guesses.";
   return "Waiting for a face image.";
+}
+
+// How much of a sheet actually comes from the photo, vs rows that are
+// neutral, manual, or placeholder. Notes counted as photo-driven:
+// "inferred", "weak inference", "sampled", "expression-sensitive".
+// This is the honest ceiling on likeness: a photo that scores 100%
+// on quality but drives only half the sheet cannot produce a 100%
+// likeness, and no single "match %" is shown until calibration data
+// exists to back one.
+export function photoDrivenCount(notes) {
+  const drivenNotes = new Set(["inferred", "weak inference", "sampled", "expression-sensitive"]);
+  const keys = Object.keys(notes);
+  return {
+    driven: keys.filter((k) => drivenNotes.has(notes[k])).length,
+    total: keys.length,
+  };
 }
 
 // Apply the shared Souls-family geometry->slider mapping. Only rows present in
