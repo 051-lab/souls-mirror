@@ -27,11 +27,15 @@ const check = (name, actual, expected) => {
   if (!ok) failures++;
 };
 
-// Image: brown hair band at top, dark brow band, blue iris dots.
+// Image: brown hair band at top, dark brow band, black pupil center
+// surrounded by a blue iris ring. The ring (not the center) is what
+// iris sampling must return — center-pixel sampling would fail here.
 const img = makeImage(100, 100, (x, y) => {
   if (y < 30) return [90, 50, 20]; // hair (hairline at landmark 10, y=30)
   if (y >= 40 && y < 44 && x >= 30 && x <= 70) return [30, 20, 10]; // brow
-  if (x === 50 && y === 50) return [20, 60, 140]; // iris center
+  const d = Math.hypot(x - 50, y - 50);
+  if (d === 0) return [10, 10, 10]; // pupil
+  if (d >= 1 && d <= 3) return [20, 60, 140]; // iris ring
   return [200, 170, 140]; // skin
 });
 const pts = pointsFrom({
@@ -43,7 +47,7 @@ const pts = pointsFrom({
 const colors = samplePhotoColors(img, pts);
 check("hair is brown band", colors.hair, [90, 50, 20]);
 check("brow is dark band", colors.brow, [30, 20, 10]);
-check("pupil is iris blue", colors.pupil, [20, 60, 140]);
+check("pupil is iris-ring blue, not pupil black", colors.pupil, [20, 60, 140]);
 
 // Out-of-bounds point returns null; apply skips null colors.
 check("oob disc is null", sampleDisc(img, { x: 1.5, y: 0.5 }, 3), null);

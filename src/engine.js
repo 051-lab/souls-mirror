@@ -227,8 +227,7 @@ export function sampleDisc(image, point, radiusPx) {
 }
 
 // Exact pixel at a normalized point (or null outside the image).
-// Used for the iris: the landmark IS the iris center, and a median
-// over a disc would drown the one iris pixel in surrounding skin.
+// Used by iris-ring sampling below.
 export function samplePoint(image, point) {
   if (!point || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
   const x = Math.round(point.x * (image.width - 1));
@@ -311,8 +310,23 @@ export function samplePhotoColors(image, points) {
     sampleDarkest(image, p(159), small),
     sampleDarkest(image, p(386), small),
   ]);
-  // Pupils: iris centers when the 478-point model is present,
-  // otherwise eye-corner midpoints.
+  // Pupils: sample a RING around each iris center, never the center
+  // pixel itself. The iris center landmark sits on the pupil — the
+  // dark hole in the middle of the iris — so the center pixel is
+  // pupil color, not iris color (caught by Codex review 2026-10-25).
+  // Ring radius is ~0.12 × eye-corner width in four diagonal
+  // directions: inside the iris, outside a normal pupil. Median
+  // across the four directions tolerates one bad sample (glint,
+  // lash shadow).
+  const sampleIris = (center, eyeWidthNorm) => {
+    const off = 0.12 * eyeWidthNorm;
+    return medianOfColors([
+      samplePoint(image, at(center.x - off, center.y - off)),
+      samplePoint(image, at(center.x + off, center.y - off)),
+      samplePoint(image, at(center.x - off, center.y + off)),
+      samplePoint(image, at(center.x + off, center.y + off)),
+    ]);
+  };
   const iris =
     points.length >= 478
       ? { left: p(468), right: p(473) }
@@ -320,8 +334,8 @@ export function samplePhotoColors(image, points) {
           left: at((p(33).x + p(133).x) / 2, (p(33).y + p(133).y) / 2),
           right: at((p(362).x + p(263).x) / 2, (p(362).y + p(263).y) / 2),
         };
-  const leftPupil = samplePoint(image, iris.left);
-  const rightPupil = samplePoint(image, iris.right);
+  const leftPupil = sampleIris(iris.left, dist(33, 133));
+  const rightPupil = sampleIris(iris.right, dist(362, 263));
   const pupil = medianOfColors([leftPupil, rightPupil]);
 
   return { hair, brow, beard, eyelash, pupil, leftPupil, rightPupil };
