@@ -292,10 +292,16 @@ export function samplePhotoColors(image, points) {
     sampleDisc(image, at(p(10).x - 0.35 * faceWidth, p(10).y - 0.08 * faceHeight), medium),
     sampleDisc(image, at(p(10).x + 0.35 * faceWidth, p(10).y - 0.08 * faceHeight), medium),
   ]);
-  // Brow: directly on the brow landmarks.
+  // Brow: darkest pixel near each brow landmark. A median disc
+  // fails here: brow landmarks sit on thin, sparse hair, so the
+  // disc is mostly forehead skin and the median reads skin
+  // (reported 2026-10-25: brow sampled 199,171,145 — skin tone).
+  // Brow hair is darker than surrounding skin, so darkest-pixel
+  // picks the hair. Limitation: very light-blond brows will read
+  // darker than they truly are.
   const brow = medianOfColors([
-    sampleDisc(image, p(70), medium),
-    sampleDisc(image, p(300), medium),
+    sampleDarkest(image, p(70), medium),
+    sampleDarkest(image, p(300), medium),
   ]);
   // Beard: chin tip + lower-jaw midpoints. Only meaningful when a
   // beard style is chosen in-game; otherwise the color is unused.
@@ -314,18 +320,30 @@ export function samplePhotoColors(image, points) {
   // pixel itself. The iris center landmark sits on the pupil — the
   // dark hole in the middle of the iris — so the center pixel is
   // pupil color, not iris color (caught by Codex review 2026-10-25).
-  // Ring radius is ~0.12 × eye-corner width in four diagonal
-  // directions: inside the iris, outside a normal pupil. Median
-  // across the four directions tolerates one bad sample (glint,
-  // lash shadow).
+  // Two ring radii (0.10× and 0.16× eye-corner width) in four
+  // diagonal directions give 8 samples. Samples that are near-black
+  // (pupil, lash shadow) or near-white (glint, sclera) are dropped
+  // before the median, because a single-radius ring still read dark
+  // and muted on the Pexels test photo (reported 2026-10-25:
+  // pupil 53,51,43). If every sample is dropped, fall back to the
+  // unfiltered median rather than returning nothing.
   const sampleIris = (center, eyeWidthNorm) => {
-    const off = 0.12 * eyeWidthNorm;
-    return medianOfColors([
-      samplePoint(image, at(center.x - off, center.y - off)),
-      samplePoint(image, at(center.x + off, center.y - off)),
-      samplePoint(image, at(center.x - off, center.y + off)),
-      samplePoint(image, at(center.x + off, center.y + off)),
-    ]);
+    const samples = [];
+    for (const k of [0.1, 0.16]) {
+      const off = k * eyeWidthNorm;
+      samples.push(
+        samplePoint(image, at(center.x - off, center.y - off)),
+        samplePoint(image, at(center.x + off, center.y - off)),
+        samplePoint(image, at(center.x - off, center.y + off)),
+        samplePoint(image, at(center.x + off, center.y + off)),
+      );
+    }
+    const kept = samples.filter((c) => {
+      if (!c) return false;
+      const lum = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      return lum >= 25 && lum <= 230;
+    });
+    return medianOfColors(kept.length ? kept : samples);
   };
   const iris =
     points.length >= 478
