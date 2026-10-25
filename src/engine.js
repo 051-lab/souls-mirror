@@ -178,6 +178,178 @@ export function buildDefaults(game) {
   return { values, notes };
 }
 
+// ---- Photo color sampling (added 2026-10-25) ----
+// The geometry mappings never sampled color: every RGB row stayed at
+// neutral 128, which renders as mid-grey hair and pale skin in-game.
+// These helpers sample real colors from the uploaded photo at
+// landmark-anchored regions. They are pure functions over a plain
+// { data, width, height } pixel buffer (no DOM), so they can be
+// unit-tested without a browser.
+//
+// Landmark indices are MediaPipe Face Landmarker (468/478-point):
+// 10 forehead top, 152 chin tip, 234/454 cheek sides, 70/300 brows,
+// 159/386 upper eyelids, 172/397 jaw corners, 468/473 iris centers
+// (478-point model only; eye-corner midpoints are the fallback).
+// Skin rows are deliberately NOT sampled here: Bloodborne's Skin
+// Color group has 7 values whose encoding is still undecoded, so
+// guessing an RGB mapping for skin would be worse than leaving it
+// manual. Tattoo/Glasses colors have no photo source either.
+
+function medianChannel(samples) {
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)] ?? 128;
+}
+
+// Median RGB of pixels inside a small disc around a normalized
+// landmark point. Returns null when the point is outside the image.
+export function sampleDisc(image, point, radiusPx) {
+  if (!point || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
+  const cx = Math.round(point.x * (image.width - 1));
+  const cy = Math.round(point.y * (image.height - 1));
+  const r = Math.max(1, Math.round(radiusPx));
+  const rs = [];
+  const gs = [];
+  const bs = [];
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r) continue;
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
+      const i = (y * image.width + x) * 4;
+      rs.push(image.data[i]);
+      gs.push(image.data[i + 1]);
+      bs.push(image.data[i + 2]);
+    }
+  }
+  if (!rs.length) return null;
+  return [medianChannel(rs), medianChannel(gs), medianChannel(bs)];
+}
+
+// Exact pixel at a normalized point (or null outside the image).
+// Used for the iris: the landmark IS the iris center, and a median
+// over a disc would drown the one iris pixel in surrounding skin.
+export function samplePoint(image, point) {
+  if (!point || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
+  const x = Math.round(point.x * (image.width - 1));
+  const y = Math.round(point.y * (image.height - 1));
+  const i = (y * image.width + x) * 4;
+  return [image.data[i], image.data[i + 1], image.data[i + 2]];
+}
+
+// Darkest pixel (by luminance) inside a small disc. Used for
+// eyelashes: the lash line is thin, so a median would return skin.
+export function sampleDarkest(image, point, radiusPx) {
+  if (!point || point.x < 0 || point.x > 1 || point.y < 0 || point.y > 1) return null;
+  const cx = Math.round(point.x * (image.width - 1));
+  const cy = Math.round(point.y * (image.height - 1));
+  const r = Math.max(1, Math.round(radiusPx));
+  let best = null;
+  let bestLum = Infinity;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy > r * r) continue;
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= image.width || y >= image.height) continue;
+      const i = (y * image.width + x) * 4;
+      const lum = 0.299 * image.data[i] + 0.587 * image.data[i + 1] + 0.114 * image.data[i + 2];
+      if (lum < bestLum) {
+        bestLum = lum;
+        best = [image.data[i], image.data[i + 1], image.data[i + 2]];
+      }
+    }
+  }
+  return best;
+}
+
+function medianOfColors(colors) {
+  const valid = colors.filter(Boolean);
+  if (!valid.length) return null;
+  return [
+    medianChannel(valid.map((c) => c[0])),
+    medianChannel(valid.map((c) => c[1])),
+    medianChannel(valid.map((c) => c[2])),
+  ];
+}
+
+export function samplePhotoColors(image, points) {
+  const p = (i) => points[i];
+  if (!points || points.length < 468) return null;
+  const dist = (a, b) => Math.hypot(p(a).x - p(b).x, p(a).y - p(b).y);
+  const faceHeight = dist(10, 152) || 0.5;
+  const faceWidth = dist(234, 454) || 0.4;
+  const px = Math.max(image.width, image.height);
+  const small = Math.max(2, px * 0.006); // iris / eyelid scale
+  const medium = Math.max(3, px * 0.012); // brow / beard scale
+  const at = (x, y) => ({ x, y });
+
+  // Hair: above the forehead, center + both sides, pooled by median.
+  // Needs hair visible above the forehead; a tightly cropped or bald
+  // photo will sample background instead — the sliders stay editable
+  // so a bad sample can always be corrected by hand.
+  const hair = medianOfColors([
+    sampleDisc(image, at(p(10).x, p(10).y - 0.25 * faceHeight), medium),
+    sampleDisc(image, at(p(10).x - 0.35 * faceWidth, p(10).y - 0.08 * faceHeight), medium),
+    sampleDisc(image, at(p(10).x + 0.35 * faceWidth, p(10).y - 0.08 * faceHeight), medium),
+  ]);
+  // Brow: directly on the brow landmarks.
+  const brow = medianOfColors([
+    sampleDisc(image, p(70), medium),
+    sampleDisc(image, p(300), medium),
+  ]);
+  // Beard: chin tip + lower-jaw midpoints. Only meaningful when a
+  // beard style is chosen in-game; otherwise the color is unused.
+  const beard = medianOfColors([
+    sampleDisc(image, p(152), medium),
+    sampleDisc(image, at((p(172).x + p(152).x) / 2, (p(172).y + p(152).y) / 2), medium),
+    sampleDisc(image, at((p(397).x + p(152).x) / 2, (p(397).y + p(152).y) / 2), medium),
+  ]);
+  // Eyelashes: darkest pixel near the upper-eyelid line (the lash
+  // line itself is too thin for a median to capture).
+  const eyelash = medianOfColors([
+    sampleDarkest(image, p(159), small),
+    sampleDarkest(image, p(386), small),
+  ]);
+  // Pupils: iris centers when the 478-point model is present,
+  // otherwise eye-corner midpoints.
+  const iris =
+    points.length >= 478
+      ? { left: p(468), right: p(473) }
+      : {
+          left: at((p(33).x + p(133).x) / 2, (p(33).y + p(133).y) / 2),
+          right: at((p(362).x + p(263).x) / 2, (p(362).y + p(263).y) / 2),
+        };
+  const leftPupil = samplePoint(image, iris.left);
+  const rightPupil = samplePoint(image, iris.right);
+  const pupil = medianOfColors([leftPupil, rightPupil]);
+
+  return { hair, brow, beard, eyelash, pupil, leftPupil, rightPupil };
+}
+
+// Write sampled colors into a game's slider values. Only keys the
+// game actually has are written; everything else keeps its value.
+// A null color (region outside the photo) leaves that row untouched.
+export function applyPhotoColors(values, notes, colors) {
+  if (!colors) return;
+  const set = (key, rgb) => {
+    if (!rgb || !(key + " Red" in values)) return;
+    values[key + " Red"] = rgb[0];
+    values[key + " Green"] = rgb[1];
+    values[key + " Blue"] = rgb[2];
+    notes[key + " Red"] = "sampled";
+    notes[key + " Green"] = "sampled";
+    notes[key + " Blue"] = "sampled";
+  };
+  set("Hair Color", colors.hair);
+  set("Brow Color", colors.brow);
+  set("Beard Color", colors.beard);
+  set("Eyelash Color", colors.eyelash);
+  set("Pupil Color", colors.pupil);
+  set("Right Pupil Color", colors.rightPupil);
+  set("Left Pupil Color", colors.leftPupil);
+}
+
 export function download(filename, content) {
   const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);

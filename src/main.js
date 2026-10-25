@@ -1,7 +1,7 @@
 import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs";
 import "./styles.css";
 import { games, getGame } from "./games/index.js";
-import { buildDefaults, getConfidenceMessage, download, csvCell, escapeHtml } from "./engine.js";
+import { buildDefaults, getConfidenceMessage, download, csvCell, escapeHtml, samplePhotoColors, applyPhotoColors } from "./engine.js";
 
 const app = document.querySelector("#app");
 
@@ -162,7 +162,7 @@ function render() {
 
       <section class="research">
         <h2>How this works</h2>
-        <p>MediaPipe face landmarks measure proportions such as eye spacing, mouth width, jaw width, chin height, and nose length. Those measurements are mapped to the Soulsbourne family's shared 0-255 slider categories.</p>
+        <p>MediaPipe face landmarks measure proportions such as eye spacing, mouth width, jaw width, chin height, and nose length. Those measurements are mapped to the Soulsbourne family's shared 0-255 slider categories. Hair, brow, beard, eyelash, and pupil colors are sampled from the photo itself (rows marked "sampled"); skin tones stay manual until their in-game encoding is decoded.</p>
         <p>This is not a save editor and does not claim exact in-game mesh reconstruction. The next quality jump is calibration: feed in screenshot pairs of real faces and generated results, then tune these mappings against actual output.</p>
         <p class="colophon">
           Fan project, unofficial. Character creation menus belong to FromSoftware / Sony. Face model runs entirely in your browser — your photo is never uploaded.
@@ -358,6 +358,20 @@ async function analyzeImage(image) {
 
     const game = currentGame();
     const analysis = game.infer(landmarks, detection.faceBlendshapes?.[0]?.categories || []);
+    // Sample hair/brow/beard/eyelash/pupil colors from the photo itself.
+    // Guarded: a color failure must never break the geometry sheet.
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth || image.width;
+      canvas.height = image.naturalHeight || image.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const colors = samplePhotoColors(pixels, landmarks);
+      applyPhotoColors(analysis.values, analysis.notes, colors);
+    } catch (colorError) {
+      // Keep the neutral color rows; geometry result still stands.
+    }
     setState({
       isLoading: false,
       result: { values: analysis.values, notes: analysis.notes },
